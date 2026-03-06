@@ -23,32 +23,31 @@ type
     bufferPos*: int
     line*, column*: int
 
-# XXX go over inlines later do it manually
-
-proc initJsonReader*(options = JsonReaderOptions()): JsonReader =
+proc initJsonReader*(options = JsonReaderOptions()): JsonReader {.inline.} =
   result = JsonReader(options: options)
 
-proc startRead*(reader: var JsonReader, vein: Vein) =
+proc startRead*(reader: var JsonReader, vein: Vein) {.inline.} =
   reader.vein = vein
   reader.bufferPos = -1
   reader.bufferLocks = 0
   reader.line = 1
   reader.column = 1
 
-proc startRead*(reader: var JsonReader, str: string) =
+proc startRead*(reader: var JsonReader, str: string) {.inline.} =
   reader.startRead(initVein(str))
 
 # ----- reader internals ----
 
+# XXX separate parse error and read error
 template error*(reader: var JsonReader, msg: string) =
   ## Shortcut to raise an exception.
   raise newException(JsonError, "(" & $reader.line & ", " & $reader.column & ") " & msg)
 
-proc extendBufferOne*(reader: var JsonReader) =
+proc extendBufferOne*(reader: var JsonReader) {.inline.} =
   let remove = reader.vein.extendBufferOne()
   reader.bufferPos -= remove
 
-proc extendBufferBy*(reader: var JsonReader, n: int) =
+proc extendBufferBy*(reader: var JsonReader, n: int) {.inline.} =
   let remove = reader.vein.extendBufferBy(n)
   reader.bufferPos -= remove
 
@@ -65,7 +64,7 @@ proc peek*(reader: var JsonReader, c: var char): bool =
     else:
       result = false
 
-proc unsafePeek*(reader: var JsonReader): char =
+proc unsafePeek*(reader: var JsonReader): char {.inline.} =
   result = reader.vein.buffer[reader.bufferPos + 1]
 
 proc peek*(reader: var JsonReader, c: var char, offset: int): bool =
@@ -81,7 +80,7 @@ proc peek*(reader: var JsonReader, c: var char, offset: int): bool =
     else:
       result = false
 
-proc unsafePeek*(reader: var JsonReader, offset: int): char =
+proc unsafePeek*(reader: var JsonReader, offset: int): char {.inline.} =
   result = reader.vein.buffer[reader.bufferPos + 1 + offset]
 
 proc peek*(reader: var JsonReader, cs: var openArray[char]): bool =
@@ -92,22 +91,22 @@ proc peek*(reader: var JsonReader, cs: var openArray[char]): bool =
     for i in 0 ..< n:
       cs[i] = reader.vein.buffer[reader.bufferPos + 1 + i]
 
-proc peekOrZero*(reader: var JsonReader): char =
+proc peekOrZero*(reader: var JsonReader): char {.inline.} =
   if not peek(reader, result):
     result = '\0'
 
-proc hasNext*(reader: var JsonReader): bool =
+proc hasNext*(reader: var JsonReader): bool {.inline.} =
   var dummy: char
   result = peek(reader, dummy)
 
-proc hasNext*(reader: var JsonReader, offset: int): bool =
+proc hasNext*(reader: var JsonReader, offset: int): bool {.inline.} =
   var dummy: char
   result = peek(reader, dummy, offset)
 
-proc lockBuffer*(reader: var JsonReader) =
+proc lockBuffer*(reader: var JsonReader) {.inline.} =
   inc reader.bufferLocks
 
-proc unlockBuffer*(reader: var JsonReader) =
+proc unlockBuffer*(reader: var JsonReader) {.inline.} =
   assert reader.bufferLocks > 0, "unpaired buffer unlock"
   dec reader.bufferLocks
 
@@ -137,7 +136,7 @@ proc next*(reader: var JsonReader, c: var char): bool =
   if reader.bufferLocks == 0: reader.vein.setFreeBefore(prevPos)
   result = true
 
-proc next*(reader: var JsonReader): bool =
+proc next*(reader: var JsonReader): bool {.inline.} =
   var dummy: char
   result = next(reader, dummy)
 
@@ -180,11 +179,11 @@ proc nextMatch*(reader: var JsonReader, cs: set[char], c: var char): bool =
   if result:
     reader.unsafeNext()
 
-proc peekMatch*(reader: var JsonReader, cs: set[char]): bool =
+proc peekMatch*(reader: var JsonReader, cs: set[char]): bool {.inline.} =
   var dummy: char
   result = reader.peekMatch(cs, dummy)
 
-proc nextMatch*(reader: var JsonReader, cs: set[char]): bool =
+proc nextMatch*(reader: var JsonReader, cs: set[char]): bool {.inline.} =
   var dummy: char
   result = reader.nextMatch(cs, dummy)
 
@@ -200,7 +199,7 @@ proc peekMatch*(reader: var JsonReader, cs: set[char], offset: int, c: var char)
   else:
     result = false
 
-proc peekMatch*(reader: var JsonReader, cs: set[char], offset: int): bool =
+proc peekMatch*(reader: var JsonReader, cs: set[char], offset: int): bool {.inline.} =
   var dummy: char
   result = reader.peekMatch(cs, offset, dummy)
 
@@ -234,8 +233,8 @@ proc read*[T: tuple](reader: var JsonReader, v: var T)
 proc read*[T: array](reader: var JsonReader, v: var T)
 proc read*[T: not object](reader: var JsonReader, v: var ref T)
 proc read*(reader: var JsonReader, v: var JsonNode)
-proc read*(reader: var JsonReader, v: var char)
-proc read*[T: distinct](reader: var JsonReader, v: var T)
+proc read*(reader: var JsonReader, v: var string)
+proc read*[T: distinct](reader: var JsonReader, v: var T) {.inline.}
 
 template eatSpace*(reader: var JsonReader) =
   ## Will consume whitespace.
@@ -265,6 +264,78 @@ proc parseSymbol*(reader: var JsonReader): string =
       break
     else:
       result.add c
+
+iterator readObjectFields*(reader: var JsonReader): string =
+  while reader.hasNext():
+    eatSpace(reader)
+    if reader.peekMatch('}'):
+      break
+    var key: string
+    read(reader, key)
+    eatChar(reader, ':')
+    yield key
+    eatSpace(reader)
+    if reader.nextMatch(','):
+      discard
+
+iterator readObject*(reader: var JsonReader): string =
+  eatChar(reader, '{')
+  for name in readObjectFields(reader):
+    yield name
+  eatChar(reader, '}')
+
+iterator readArrayItems*(reader: var JsonReader, start = 0): int =
+  var i = start
+  while reader.hasNext():
+    eatSpace(reader)
+    if reader.peekMatch(']'):
+      break
+    yield i
+    eatSpace(reader)
+    if reader.nextMatch(','):
+      discard
+    elif reader.peekMatch(']'):
+      discard
+    else:
+      # maybe improve error message wasnt in original
+      reader.error("expected comma")
+    inc i
+
+iterator readArray*(reader: var JsonReader): int =
+  eatChar(reader, '[')
+  for i in readArrayItems(reader):
+    yield i
+  eatChar(reader, '}')
+
+proc peekKind*(reader: var JsonReader): JsonNodeKind =
+  ## guesses which kind the next object is, assumes spaces are skipped
+  ## not guaranteed to be accurate, all numbers are assumed float
+  let start = reader.peekOrZero()
+  case start
+  of '{':
+    result = JObject
+  of '[':
+    result = JArray
+  of '"':
+    result = JString
+  of '-', '+', '0'..'9':
+    result = JFloat # all numbers float?
+  else:
+    if reader.peekMatch("true") or reader.peekMatch("false"):
+      result = JBool
+    elif reader.nextMatch("null"):
+      result = JNull
+    else:
+      # XXX nan inf
+      var msg = "unknown value starting with character "
+      msg.addQuoted(start)
+      reader.error(msg)
+
+proc readKind*(reader: var JsonReader): JsonNodeKind {.inline.} =
+  ## guesses which kind the next object is, skips spaces
+  ## not guaranteed to be accurate,all numbers are assumed float
+  eatSpace(reader)
+  result = peekKind(reader)
 
 proc read*(reader: var JsonReader, v: var bool) =
   ## Will parse boolean true or false.
@@ -332,6 +403,7 @@ proc read*(reader: var JsonReader, v: var SomeSignedInt) =
 
 proc read*(reader: var JsonReader, v: var SomeFloat) =
   ## Will parse float32 and float64.
+  # XXX needs to parse nan and inf strings
   eatSpace(reader)
   # build float string based on acceptable characters:
   var s = ""
@@ -426,7 +498,6 @@ proc validRune(reader: var JsonReader, rune: var Rune, start: char): int =
         )
 
 proc parseUnicodeEscape(reader: var JsonReader): int =
-  # uXXXX
   #reader.unsafeNext() # u already skipped
   var hexStr = newString(4)
   if not reader.peek(hexStr):
@@ -532,20 +603,9 @@ proc read*(reader: var JsonReader, v: var char) =
 
 proc read*[T](reader: var JsonReader, v: var seq[T]) =
   ## Parse seq.
-  eatChar(reader, '[')
-  while reader.hasNext():
-    eatSpace(reader)
-    if reader.peekMatch(']'):
-      break
+  for i in readArray(reader):
     var element: T
     read(reader, element)
-    v.add(element)
-    eatSpace(reader)
-    if reader.nextMatch(','):
-      discard
-    else:
-      break
-  eatChar(reader, ']')
 
 proc read*[T: array](reader: var JsonReader, v: var T) =
   eatSpace(reader)
@@ -555,6 +615,7 @@ proc read*[T: array](reader: var JsonReader, v: var T) =
     inc i
     eatSpace(reader)
     if reader.peekMatch(']'):
+      # XXX special parse is just for this error which i added could just remove
       reader.error("expected " & $i & "th element in array of len " & $len(v))
     read(reader, value)
     eatSpace(reader)
@@ -628,7 +689,7 @@ template snakeCase(s: string): string =
 proc parseObjectInner[T](reader: var JsonReader, v: var T) =
   while reader.hasNext():
     eatSpace(reader)
-    if reader.peekNext('}'):
+    if reader.peekMatch('}'):
       break
     var key: string
     read(reader, key)
@@ -768,53 +829,26 @@ proc read*[K: string | enum, V](reader: var JsonReader, v: var SomeTable[K, V]) 
 
 proc read*[T](reader: var JsonReader, v: var (SomeSet[T]|set[T])) =
   ## Parses `HashSet`, `OrderedSet`, or a built-in `set` type.
-  eatSpace(reader)
-  eatChar(reader, '[')
-  while reader.hasNext():
-    eatSpace(reader)
-    if reader.peekMatch(']'):
-      break
+  for i in readArray(reader):
     var e: T
     read(reader, e)
     v.incl(e)
-    eatSpace(reader)
-    if reader.nextMatch(','):
-      discard
-  eatChar(reader, ']')
 
 proc read*(reader: var JsonReader, v: var JsonNode) =
   ## Parses a regular json node.
   eatSpace(reader)
   if reader.peekMatch('{'):
     v = newJObject()
-    eatChar(reader, '{')
-    while reader.hasNext():
-      eatSpace(reader)
-      if reader.peekMatch('}'):
-        break
-      var k: string
-      read(reader, k)
-      eatChar(reader, ':')
+    for k in readObject(reader):
       var e: JsonNode
       read(reader, e)
       v[k] = e
-      eatSpace(reader)
-      if reader.nextMatch(','):
-        discard
-    eatChar(reader, '}')
   elif reader.peekMatch('['):
     v = newJArray()
-    eatChar(reader, '[')
-    while reader.hasNext():
-      eatSpace(reader)
-      if reader.peekMatch(']'):
-        break
+    for i in readArray(reader):
       var e: JsonNode
       read(reader, e)
       v.add(e)
-      eatSpace(reader)
-      if reader.nextMatch(','):
-        discard
     eatChar(reader, ']')
   elif reader.peekMatch('"'):
     var str: string
@@ -839,12 +873,10 @@ proc read*(reader: var JsonReader, v: var JsonNode) =
     else:
       reader.error("Unexpected.")
 
-proc read*[T: distinct](reader: var JsonReader, v: var T) =
-  var x: T.distinctBase
-  read(reader, x)
-  v = cast[T](x)
+proc read*[T: distinct](reader: var JsonReader, v: var T) {.inline.} =
+  read(reader, distinctBase(T)(v))
 
-proc fromJson*[T](s: string, x: typedesc[T]): T =
+proc fromJson*[T](s: string, x: typedesc[T]): T {.inline.} =
   ## Takes json and outputs the object it represents.
   ## * Extra json fields are ignored.
   ## * Missing json fields keep their default values.
@@ -857,7 +889,7 @@ proc fromJson*[T](s: string, x: typedesc[T]): T =
   if reader.hasNext():
     reader.error("Found non-whitespace character after JSON data.")
 
-proc fromJson*(s: string): JsonNode =
+proc fromJson*(s: string): JsonNode {.inline.} =
   ## Takes json parses it into `JsonNode`s.
   var reader = initJsonReader()
   reader.startRead(s)
@@ -880,25 +912,25 @@ type
     flushLocks*: int
     flushPos*: int
 
-proc initJsonDumper*(options = JsonDumperOptions()): JsonDumper =
+proc initJsonDumper*(options = JsonDumperOptions()): JsonDumper {.inline.} =
   result = JsonDumper(options: options)
 
-proc lockFlush*(dumper: var JsonDumper) =
+proc lockFlush*(dumper: var JsonDumper) {.inline.}=
   inc dumper.flushLocks
 
-proc unlockFlush*(dumper: var JsonDumper) =
+proc unlockFlush*(dumper: var JsonDumper) {.inline.} =
   assert dumper.flushLocks > 0, "unpaired flush unlock"
   dec dumper.flushLocks
 
-proc startDump*(dumper: var JsonDumper, artery: Artery) =
+proc startDump*(dumper: var JsonDumper, artery: Artery) {.inline.} =
   dumper.artery = artery
   dumper.flushLocks = 0
   dumper.flushPos = 0
 
-proc startDump*(dumper: var JsonDumper) =
+proc startDump*(dumper: var JsonDumper) {.inline.} =
   dumper.startDump(Artery(buffer: "", bufferConsumer: nil))
 
-proc finishDump*(dumper: var JsonDumper): string =
+proc finishDump*(dumper: var JsonDumper): string {.inline.} =
   ## returns leftover buffer
   assert dumper.flushLocks == 0, "unpaired flush lock"
   dumper.flushPos += dumper.artery.flushBufferFull(dumper.flushPos)
@@ -907,47 +939,99 @@ proc finishDump*(dumper: var JsonDumper): string =
   else:
     result = ""
 
-proc addToBuffer*(dumper: var JsonDumper, c: char) =
+proc addToBuffer*(dumper: var JsonDumper, c: char) {.inline.} =
   dumper.flushPos -= dumper.artery.addToBuffer(c)
 
-proc addToBuffer*(dumper: var JsonDumper, s: sink string) =
+proc addToBuffer*(dumper: var JsonDumper, s: sink string) {.inline.} =
   dumper.flushPos -= dumper.artery.addToBuffer(s)
 
-proc flushBuffer*(dumper: var JsonDumper) =
+proc flushBuffer*(dumper: var JsonDumper) {.inline.} =
   # XXX maybe pick a better word, maybe "flow" or just "send" to be boring
   #dumper.artery.flushBufferOnce(bufferPos)
   dumper.flushPos += dumper.artery.flushBuffer(dumper.flushPos)
   if dumper.flushLocks == 0: dumper.artery.freeAfter = dumper.flushPos
 
-proc write*(dumper: var JsonDumper, c: char) =
+proc write*(dumper: var JsonDumper, c: char) {.inline.} =
   dumper.addToBuffer(c)
   dumper.flushBuffer()
 
-proc write*(dumper: var JsonDumper, s: sink string) =
+proc write*(dumper: var JsonDumper, s: sink string) {.inline.} =
   dumper.addToBuffer(s)
   dumper.flushBuffer()
 
-proc dump*(dumper: var JsonDumper, v: bool)
-proc dump*(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64)
-proc dump*(dumper: var JsonDumper, v: int|int8|int16|int32|int64)
-proc dump*(dumper: var JsonDumper, v: SomeFloat)
 proc dump*(dumper: var JsonDumper, v: string)
-proc dump*(dumper: var JsonDumper, v: char)
-proc dump*(dumper: var JsonDumper, v: tuple)
-proc dump*(dumper: var JsonDumper, v: enum)
 type t[T] = tuple[a: string, b: T]
 proc dump*[N, T](dumper: var JsonDumper, v: array[N, t[T]])
 proc dump*[N, T](dumper: var JsonDumper, v: array[N, T])
 proc dump*[T](dumper: var JsonDumper, v: seq[T])
 proc dump*(dumper: var JsonDumper, v: object)
-proc dump*(dumper: var JsonDumper, v: ref)
-proc dump*[T: distinct](dumper: var JsonDumper, v: T)
+proc dump*[T: distinct](dumper: var JsonDumper, v: T) {.inline.}
 
-proc dump*[T: distinct](dumper: var JsonDumper, v: T) =
-  var x = cast[T.distinctBase](v)
-  dumper.dump(x)
+# don't dogfood these yet if they add to compile times:
+type
+  ArrayDump* = object
+    needsComma*: bool
+  ObjectDump* = object
+    needsComma*: bool
 
-proc dump*(dumper: var JsonDumper, v: bool) =
+proc startArrayDump*(dumper: var JsonDumper): ArrayDump {.inline.} =
+  result = ArrayDump(needsComma: false)
+  dumper.write '['
+
+proc finishArrayDump*(dumper: var JsonDumper, arr: var ArrayDump) {.inline.} =
+  dumper.write ']'
+
+proc startArrayField*(dumper: var JsonDumper, arr: var ArrayDump) {.inline.} =
+  if arr.needsComma:
+    dumper.write ','
+  else:
+    arr.needsComma = true
+
+proc finishArrayField*(dumper: var JsonDumper, arr: var ArrayDump) {.inline.} =
+  discard
+
+template withArrayDump*(dumper: var JsonDumper, arr: var ArrayDump, body: typed) =
+  arr = startArrayDump(dumper)
+  body
+  finishArrayDump(dumper, arr)
+
+template withArrayField*(dumper: var JsonDumper, arr: var ArrayDump, body: typed) =
+  startArrayField(dumper, arr)
+  body
+  finishArrayField(dumper, arr)
+
+proc startObjectDump*(dumper: var JsonDumper): ObjectDump {.inline.} =
+  result = ObjectDump(needsComma: false)
+  dumper.write '{'
+
+proc finishObjectDump*(dumper: var JsonDumper, arr: var ObjectDump) {.inline.} =
+  dumper.write '}'
+
+proc startObjectField*(dumper: var JsonDumper, arr: var ObjectDump, name: string) {.inline.} =
+  if arr.needsComma:
+    dumper.write ','
+  else:
+    arr.needsComma = true
+  dumper.dump name
+  dumper.write ':'
+
+proc finishObjectField*(dumper: var JsonDumper, arr: var ObjectDump) {.inline.} =
+  discard
+
+template withObjectDump*(dumper: var JsonDumper, arr: var ObjectDump, body: typed) =
+  arr = startObjectDump(dumper)
+  body
+  finishObjectDump(dumper, arr)
+
+template withObjectField*(dumper: var JsonDumper, arr: var ObjectDump, name: string, body: typed) =
+  startObjectField(dumper, arr, name)
+  body
+  finishObjectField(dumper, arr)
+
+proc dump*[T: distinct](dumper: var JsonDumper, v: T) {.inline.} =
+  dumper.dump(distinctBase(T)(v))
+
+proc dump*(dumper: var JsonDumper, v: bool) {.inline.} =
   if v:
     dumper.write "true"
   else:
@@ -962,7 +1046,7 @@ const lookup = block:
     s.add($i)
   s
 
-proc dumpNumberSlow(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64) =
+proc dumpNumberSlow(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64) {.inline.} =
   dumper.write $v.uint64
 
 proc dumpNumberFast(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64) =
@@ -995,7 +1079,7 @@ proc dumpNumberFast(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64) 
     inc at
   dumper.flushBuffer()
 
-proc dump*(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64) =
+proc dump*(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64) {.inline.} =
   when nimvm:
     dumper.dumpNumberSlow(v)
   else:
@@ -1004,7 +1088,7 @@ proc dump*(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64) =
     else:
       dumper.dumpNumberFast(v)
 
-proc dump*(dumper: var JsonDumper, v: int|int8|int16|int32|int64) =
+proc dump*(dumper: var JsonDumper, v: int|int8|int16|int32|int64) {.inline.} =
   if v < 0:
     dumper.write '-'
     dump(dumper, 0.uint64 - v.uint64)
@@ -1013,6 +1097,7 @@ proc dump*(dumper: var JsonDumper, v: int|int8|int16|int32|int64) =
 
 proc dump*(dumper: var JsonDumper, v: SomeFloat) =
   #dumper.write $v # original jsony
+  # XXX nan inf strings
   dumper.artery.buffer.addFloat(v)
   dumper.flushBuffer()
 
@@ -1062,6 +1147,10 @@ proc validRuneAt(s: string, i: int, rune: var Rune): int =
           (uint(s[i+3]) and ones(6))
         )
 
+const hex = [
+  '0', '1', '2', '3', '4', '5', '6', '7',
+  '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
+
 proc dump*(dumper: var JsonDumper, v: string) =
   dumper.write '"'
 
@@ -1092,9 +1181,6 @@ proc dump*(dumper: var JsonDumper, v: string) =
       inCopy = false
   try:
     while i < v.len:
-      const hex = [
-        '0', '1', '2', '3', '4', '5', '6', '7',
-        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
       let c = v[i]
       if (cast[uint8](c) and 0b10000000) == 0:
         # When the high bit is not set this is a single-byte character (ASCII)
@@ -1138,7 +1224,7 @@ proc dump*(dumper: var JsonDumper, v: string) =
         else: # Not a valid rune, use replacement character 
           finishCopy()
           when false:
-            s.add Rune(0xfffd) # XXX ??? this is just bad
+            s.add Rune(0xfffd) # ??? this is just bad
           if dumper.options.useXEscape:
             dumper.write r"\x"
           else:
@@ -1152,13 +1238,31 @@ proc dump*(dumper: var JsonDumper, v: string) =
 
   dumper.write '"'
 
-template dumpKey(dumper: var JsonDumper, v: string) =
-  const v2 = jsony.toJson(v) & ":"
-  dumper.write v2
-
 proc dump*(dumper: var JsonDumper, v: char) =
   dumper.write '"'
-  dumper.write v
+  if v < 32.char or v > 127.char or v == '\\' or v == '"':
+    case v
+    of '\\': dumper.write r"\\"
+    of '\b': dumper.write r"\b"
+    of '\f': dumper.write r"\f"
+    of '\n': dumper.write r"\n"
+    of '\r': dumper.write r"\r"
+    of '\t': dumper.write r"\t"
+    of '\v':
+      if dumper.options.useXEscape:
+        dumper.write r"\x0b"
+      else:
+        dumper.write r"\u000b"
+    of '"': dumper.write r"\"""
+    else:
+      if dumper.options.useXEscape:
+        dumper.write r"\x"
+      else:
+        dumper.write r"\u00"
+      dumper.write hex[v.int shr 4]
+      dumper.write hex[v.int and 0xf]
+  else:
+    dumper.write v
   dumper.write '"'
 
 proc dump*(dumper: var JsonDumper, v: tuple) =
@@ -1171,7 +1275,7 @@ proc dump*(dumper: var JsonDumper, v: tuple) =
     inc i
   dumper.write ']'
 
-proc dump*(dumper: var JsonDumper, v: enum) =
+proc dump*(dumper: var JsonDumper, v: enum) {.inline.} =
   dumper.dump($v)
 
 proc dump*[N, T](dumper: var JsonDumper, v: array[N, T]) =
@@ -1192,7 +1296,7 @@ proc dump*[T](dumper: var JsonDumper, v: seq[T]) =
     dumper.dump(e)
   dumper.write ']'
 
-proc dump*[T](dumper: var JsonDumper, v: Option[T]) =
+proc dump*[T](dumper: var JsonDumper, v: Option[T]) {.inline.} =
   if v.isNone:
     dumper.write "null"
   else:
@@ -1244,7 +1348,7 @@ proc dump*[N, T](dumper: var JsonDumper, v: array[N, t[T]]) =
     inc i
   dumper.write '}'
 
-proc dump*(dumper: var JsonDumper, v: ref) =
+proc dump*(dumper: var JsonDumper, v: ref) {.inline.} =
   if v == nil:
     dumper.write "null"
   else:
@@ -1297,16 +1401,16 @@ proc dump*(dumper: var JsonDumper, v: JsonNode) =
     of JBool:
       dumper.dump(v.getBool)
 
-proc read*(reader: var JsonReader, v: var RawJson) =
+proc read*(reader: var JsonReader, v: var RawJson) {.inline.} =
   reader.lockBuffer()
   let oldI = reader.bufferPos
   skipValue(reader)
   v = reader.vein.buffer[oldI .. reader.bufferPos].RawJson
 
-proc dump*(dumper: var JsonDumper, v: RawJson) =
+proc dump*(dumper: var JsonDumper, v: RawJson) {.inline.} =
   dumper.write v.string
 
-proc toJson*[T](v: T): string =
+proc toJson*[T](v: T): string {.inline.} =
   var dumper = initJsonDumper()
   dumper.startDump()
   dumper.dump(v)
@@ -1326,6 +1430,3 @@ template toStaticJson*(v: untyped): static[string] =
 #   ## This will turn v into json at compile time and return the json string.
 #   const s = v.toJsonDynamic()
 #   s
-
-when defined(release):
-  {.pop.}
