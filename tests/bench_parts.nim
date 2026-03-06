@@ -85,6 +85,13 @@ block:
     for i in 0 ..< 1000:
       keep holojsony.toJson(number42)
 
+  timeIt "holojsony dumper", 100:
+    var dumper = initJsonDumper()
+    for i in 0 ..< 1000:
+      dumper.startDump()
+      dumper.dump(number42)
+      keep finishDump(dumper)
+
   timeIt "disruptek/jason", 100:
     for i in 0 ..< 1000:
       keep number42.jason.string
@@ -109,6 +116,13 @@ block:
   timeIt "holojsony", 100:
     for i in 0 ..< 1000:
       keep holojsony.toJson(hello)
+
+  timeIt "holojsony dumper", 100:
+    var dumper = initJsonDumper()
+    for i in 0 ..< 1000:
+      dumper.startDump()
+      dumper.dump(hello)
+      keep finishDump(dumper)
 
   timeIt "disruptek/jason", 100:
     for i in 0 ..< 1000:

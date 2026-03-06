@@ -1,4 +1,4 @@
-import ./[common, readerdef, readerbasic], std/[options, tables, sets]
+import ./[readerdef, readerbasic], std/[options, tables, sets]
 
 proc read*[T](reader: var JsonReader, v: var Option[T]) =
   ## Parse an Option.
@@ -11,8 +11,7 @@ proc read*[T](reader: var JsonReader, v: var Option[T]) =
   read(reader, e)
   v = some(e)
 
-proc read*[K: string | enum, V](reader: var JsonReader, v: var SomeTable[K, V]) =
-  ## Parse an object.
+template tableImpl(reader, v, K, V) =
   mixin read
   when v is ref:
     if reader.nextMatch("null"):
@@ -36,8 +35,40 @@ proc read*[K: string | enum, V](reader: var JsonReader, v: var SomeTable[K, V]) 
       break
   eatChar(reader, '}')
 
-proc read*[T](reader: var JsonReader, v: var SomeSet[T]) =
-  ## Parses `HashSet` or `OrderedSet`.
+proc read*[K: string | enum, V](reader: var JsonReader, v: var Table[K, V]) =
+  ## Parse an object.
+  tableImpl(reader, v, K, V)
+
+proc read*[K: string | enum, V](reader: var JsonReader, v: var OrderedTable[K, V]) =
+  ## Parse an object.
+  tableImpl(reader, v, K, V)
+
+proc read*[K: string | enum, V](reader: var JsonReader, v: var TableRef[K, V]) =
+  ## Parse an object.
+  tableImpl(reader, v, K, V)
+
+proc read*[K: string | enum, V](reader: var JsonReader, v: var OrderedTableRef[K, V]) =
+  ## Parse an object.
+  tableImpl(reader, v, K, V)
+
+proc read*[K: string | enum](reader: var JsonReader, v: var CountTable[K]) =
+  ## Parse an object.
+  tableImpl(reader, v, K, int)
+
+proc read*[K: string | enum](reader: var JsonReader, v: var CountTableRef[K]) =
+  ## Parse an object.
+  tableImpl(reader, v, K, int)
+
+proc read*[T](reader: var JsonReader, v: var HashSet[T]) =
+  ## Parses `HashSet`.
+  mixin read
+  for i in readArray(reader):
+    var e: T
+    read(reader, e)
+    v.incl(e)
+
+proc read*[T](reader: var JsonReader, v: var OrderedSet[T]) =
+  ## Parses `OrderedSet`.
   mixin read
   for i in readArray(reader):
     var e: T

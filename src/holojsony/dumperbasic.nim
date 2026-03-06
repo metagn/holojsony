@@ -2,7 +2,7 @@ import ./[common, dumperdef], hemodyne/syncartery, std/[json, typetraits, unicod
 import std/math # for classify
 import private/fields
 
-export JsonDumper, JsonDumperOptions, initJsonDumper, startDump
+export JsonDumper, JsonDumperOptions, initJsonDumper, startDump, finishDump
 
 proc dump*(dumper: var JsonDumper, v: string)
 type t[T] = tuple[a: string, b: T]
@@ -384,7 +384,8 @@ proc dump*(dumper: var JsonDumper, v: object) =
   mixin dump
   dumper.write '{'
   var i = 0
-  when compiles(for k, e in v.pairs: discard):
+  when false and compiles(for k, e in v.pairs: discard):
+    # XXX disabled, arbitrary keys dont work
     # Tables and table like objects.
     for k, e in v.pairs:
       if i > 0:

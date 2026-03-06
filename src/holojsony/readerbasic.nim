@@ -1,4 +1,5 @@
-import ./[common, readerdef], private/[objvar, fields, caseutils], hemodyne/syncvein, std/[strutils, unicode, parseutils, typetraits, macros]
+import ./[common, readerdef], private/[objvar, fields, caseutils], hemodyne/syncvein
+import std/[strutils, unicode, parseutils, typetraits, macros, importutils]
 import std/json #from std/json import JsonNodeKind, JsonNode
 export JsonReader, JsonReaderOptions, initJsonReader, startRead
 
@@ -537,6 +538,7 @@ macro genRenameCase(fields: static openArray[(string, FieldJsonOptions)], key: s
       for name in readNames:
         branch.add newLit(name)
       #branch.add crudeReplaceIdent(body, "field", newDotExpr(copy v, ident fieldName))
+      let readName = bindSym("read", brForceOpen)
       let fieldIdent = ident fieldName
       when false:
         branch.add newStmtList(
@@ -547,7 +549,7 @@ macro genRenameCase(fields: static openArray[(string, FieldJsonOptions)], key: s
           # XXX compiler thinks this is immutable:
           #read(reader, `v`.`fieldIdent`)
           var v2: typeof(`v`.`fieldIdent`)
-          read(reader, v2)
+          `readName`(reader, v2)
           `v`.`fieldIdent` = v2
       result.add branch
   if result.len == 1:
@@ -562,6 +564,7 @@ proc finishObjectRead*[T](reader: var JsonReader, v: var T) {.inline.} =
 
 proc parseObjectInner[T](reader: var JsonReader, v: var T) {.inline.} =
   mixin read
+  privateAccess(T) # important
   while reader.hasNext():
     eatSpace(reader)
     if reader.peekMatch('}'):
@@ -580,7 +583,7 @@ proc parseObjectInner[T](reader: var JsonReader, v: var T) {.inline.} =
               read(reader, v2)
               v = v2
               break all
-        discard skipValue(reader)
+          discard skipValue(reader)
       else:
         const fieldOptions = fieldOptionPairs(v)
         genRenameCase(fieldOptions, key, v)
@@ -656,6 +659,7 @@ macro genDiscrimCase(fields: static openArray[(string, FieldJsonOptions)], key: 
         branch.add newLit(name)
       #branch.add crudeReplaceIdent(body, "field", newDotExpr(copy v, ident fieldName))
       let fieldIdent = ident fieldName
+      let readName = bindSym("read", brForceOpen)
       when false:
         branch.add newStmtList(
           newCall(ident"read", ident"reader", newDotExpr(copy v, fieldIdent)),
@@ -667,7 +671,7 @@ macro genDiscrimCase(fields: static openArray[(string, FieldJsonOptions)], key: 
           # XXX compiler thinks this is immutable:
           #read(reader, `v`.`fieldIdent`)
           var v2: typeof(`v`.`fieldIdent`)
-          read(reader, v2)
+          `readName`(reader, v2)
           initObjVariant(`v`, v2)
           break
       result.add branch
@@ -677,6 +681,7 @@ macro genDiscrimCase(fields: static openArray[(string, FieldJsonOptions)], key: 
 
 proc read*[T: object|ref object](reader: var JsonReader, v: var T) =
   ## Parse an object or ref object.
+  privateAccess(T) # important
   mixin read
   eatSpace(reader)
   when T is ref: # changed from original jsony, which allows object

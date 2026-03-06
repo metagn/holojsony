@@ -77,3 +77,14 @@ block: # issue 52
   doAssert $(a.toJson()) == """{"A":"aaaa","B":"bbb"}"""
   let t = a.toJson().fromJson(Table[Answer, string])
   doAssert t == a
+
+block: # non string table:
+  var s = "{}"
+  var v = s.fromJson(Table[int, int])
+  doAssert v.len == 0
+
+block: # roundtrip non string:
+  let tab = {1: 10, 2: 20, 3: 30}.toTable
+  let js = tab.toJson()
+  let tab2 = js.fromJson(typeof tab)
+  doAssert tab == tab2
