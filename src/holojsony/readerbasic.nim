@@ -101,7 +101,7 @@ proc peekKind*(reader: var JsonReader): JsonNodeKind =
   else:
     if reader.peekMatch("true") or reader.peekMatch("false"):
       result = JBool
-    elif reader.nextMatch("null"):
+    elif reader.peekMatch("null"):
       result = JNull
     else:
       # XXX nan inf
@@ -181,45 +181,74 @@ proc read*(reader: var JsonReader, v: var SomeSignedInt) =
 
 proc read*(reader: var JsonReader, v: var SomeFloat) =
   ## Will parse float32 and float64.
-  # XXX needs to parse nan and inf strings
   eatSpace(reader)
+  if reader.peekMatch('"'):
+    # string, check for nim json nan and inf strings:
+    if reader.nextMatch("\"nan\""):
+      v = NaN
+    elif reader.nextMatch("\"inf\""):
+      v = Inf
+    elif reader.nextMatch("\"-inf\""):
+      v = NegInf
+    else:
+      reader.error("invalid float string")
+    return
+  if reader.options.rawJsNanInf:
+    if reader.nextMatch("NaN"):
+      v = NaN
+      return
+    elif reader.nextMatch("Infinity"):
+      v = Inf
+      return
+    elif reader.nextMatch("-Infinity"):
+      v = NegInf
+      return
   # build float string based on acceptable characters:
   var s = ""
-  block signPart:
-    var sign: char
-    if reader.nextMatch({'-', '+'}, sign):
-      s.add sign
-  block integerPart:
-    for c in reader.peekNext():
-      case c
-      of '0'..'9': s.add c
-      else: break
-  block decimalPoint:
-    if reader.peekMatch('.') and reader.peekMatch({'0'..'9'}, offset = 1):
-      s.add '.'
-      reader.unsafeNext()
+  block fullFloat:
+    block signPart:
+      var sign: char
+      if reader.nextMatch({'-', '+'}, sign):
+        s.add sign
+    block integerPart:
+      var hasDigit = false
       for c in reader.peekNext():
         case c
-        of '0'..'9': s.add c
-        else: break
-  block exponent:
-    var hasSign = false
-    if reader.peekMatch({'e', 'E'}):
-      var digitOffset = 1
-      hasSign = reader.peekMatch({'+', '-'}, offset = 1)
-      if hasSign:
-        inc digitOffset
-      if reader.peekMatch({'0'..'9'}, offset = digitOffset):
-        var c: char
-        doAssert reader.next(c)
-        s.add c # e/E
-        if hasSign:
-          doAssert reader.next(c)
+        of '0'..'9':
+          hasDigit = true
           s.add c
+        else: break
+      if not hasDigit:
+        s = ""
+        break fullFloat
+    block decimalPoint:
+      if reader.peekMatch('.') and reader.peekMatch({'0'..'9'}, offset = 1):
+        s.add '.'
+        reader.unsafeNext()
         for c in reader.peekNext():
           case c
           of '0'..'9': s.add c
           else: break
+    block exponent:
+      var hasSign = false
+      if reader.peekMatch({'e', 'E'}):
+        var digitOffset = 1
+        hasSign = reader.peekMatch({'+', '-'}, offset = 1)
+        if hasSign:
+          inc digitOffset
+        if reader.peekMatch({'0'..'9'}, offset = digitOffset):
+          var c: char
+          doAssert reader.next(c)
+          s.add c # e/E
+          if hasSign:
+            doAssert reader.next(c)
+            s.add c
+          for c in reader.peekNext():
+            case c
+            of '0'..'9': s.add c
+            else: break
+  if s.len == 0:
+    reader.error("Failed to parse a float.")
   var i = 0
   var f: float
   let chars = parseutils.parseFloat(s, f, i)
@@ -277,13 +306,23 @@ proc validRune(reader: var JsonReader, rune: var Rune, start: char): int =
           (uint(bytes[3]) and ones(6))
         )
 
+proc parseHexInt[I](reader: var JsonReader, a: array[I, char]): int {.inline.} =
+  result = 0
+  for i in 0 ..< a.len:
+    let c = a[i]
+    case c
+    of '0'..'9': result = (result shl 4) or (c.int - '0'.int)
+    of 'A'..'F': result = (result shl 4) or (10 + c.int - 'A'.int)
+    of 'a'..'f': result = (result shl 4) or (10 + c.int - 'a'.int)
+    else: reader.parseError("expected hex char in escape sequence, got " & $c)
+
 proc parseUnicodeEscape(reader: var JsonReader): int =
   #reader.unsafeNext() # u already skipped
-  var hexStr = newString(4)
+  var hexStr: array[4, char]
   if not reader.peek(hexStr):
     reader.parseError("Expected unicode escape hex but end reached.")
   for i in 1..hexStr.len: reader.unsafeNext()
-  result = parseHexInt(hexStr)
+  result = parseHexInt(reader, hexStr)
   if reader.options.handleUtf16:
     # Deal with UTF-16 surrogates. Most of the time strings are encoded as utf8
     # but some APIs will reply with UTF-16 surrogate pairs which needs to be dealt
@@ -292,13 +331,21 @@ proc parseUnicodeEscape(reader: var JsonReader): int =
       if not reader.nextMatch("\\u"):
         # maybe make the option an enum for whether or not to error here
         reader.error("Found an Orphan Surrogate.")
-      var nextHexStr = newString(4)
+      var nextHexStr: array[4, char]
       if not reader.peek(nextHexStr):
         reader.error("Expected unicode escape hex but end reached.")
       for i in 1..nextHexStr.len: reader.unsafeNext()
-      let nextRune = parseHexInt(nextHexStr)
+      let nextRune = parseHexInt(reader, nextHexStr)
       if (nextRune and 0xfc00) == 0xdc00:
         result = 0x10000 + (((result - 0xd800) shl 10) or (nextRune - 0xdc00))
+
+proc parseByte(reader: var JsonReader): byte =
+  #reader.unsafeNext() # x already skipped
+  var hexStr: array[2, char]
+  if not reader.peek(hexStr):
+    reader.parseError("Expected byte escape hex but end reached.")
+  for i in 1..hexStr.len: reader.unsafeNext()
+  result = parseHexInt(reader, hexStr).byte
 
 proc read*(reader: var JsonReader, v: var string) =
   ## Parse string.
@@ -365,6 +412,9 @@ proc read*(reader: var JsonReader, v: var string) =
           of 't': v.add '\t'
           of 'u':
             v.add(Rune(parseUnicodeEscape(reader)))
+            continue
+          of 'x':
+            v.add(char(parseByte(reader)))
             continue
           else:
             v.add(c)

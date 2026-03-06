@@ -7,6 +7,9 @@ type
       ## jsony converts utf 16 characters in strings by default apparently so does stdlib json
     forceUtf8Strings*: bool
       ## jsony errors if binary data in strings is not utf8, this is now opt in
+    rawJsNanInf*: bool
+      ## parses raw NaN/Infinity/-Infinity as in js and json5
+    # XXX comments?
   JsonReader* = object
     options*: JsonReaderOptions
     vein*: Vein
@@ -77,7 +80,7 @@ proc peek*(reader: var JsonReader, c: var char, offset: int): bool {.inline.} =
 proc unsafePeek*(reader: var JsonReader, offset: int): char {.inline.} =
   result = reader.vein.buffer[reader.bufferPos + 1 + offset]
 
-proc peek*(reader: var JsonReader, cs: var openArray[char]): bool {.inline.} =
+template peekStrImpl(reader: var JsonReader, cs) {.dirty.} =
   result = false
   let n = cs.len
   if reader.bufferPos + n >= reader.vein.buffer.len:
@@ -86,6 +89,12 @@ proc peek*(reader: var JsonReader, cs: var openArray[char]): bool {.inline.} =
     result = true
     for i in 0 ..< n:
       cs[i] = reader.vein.buffer[reader.bufferPos + 1 + i]
+
+proc peek*(reader: var JsonReader, cs: var openArray[char]): bool {.inline.} =
+  peekStrImpl(reader, cs)
+
+proc peek*[I](reader: var JsonReader, cs: var array[I, char]): bool {.inline.} =
+  peekStrImpl(reader, cs)
 
 proc peekOrZero*(reader: var JsonReader): char {.inline.} =
   if not peek(reader, result):
@@ -201,7 +210,7 @@ proc peekMatch*(reader: var JsonReader, cs: set[char], offset: int): bool {.inli
   var dummy: char
   result = reader.peekMatch(cs, offset, dummy)
 
-proc peekMatch*(reader: var JsonReader, str: openArray[char]): bool {.inline.} =
+template peekMatchStrImpl(reader: var JsonReader, str) {.dirty.} =
   if reader.bufferPos + str.len >= reader.vein.buffer.len:
     reader.loadBufferBy(str.len)
   if reader.bufferPos + str.len < reader.vein.buffer.len:
@@ -212,7 +221,29 @@ proc peekMatch*(reader: var JsonReader, str: openArray[char]): bool {.inline.} =
   else:
     result = false
 
+proc peekMatch*(reader: var JsonReader, str: openArray[char]): bool {.inline.} =
+  peekMatchStrImpl(reader, str)
+
+proc peekMatch*[I](reader: var JsonReader, str: array[I, char]): bool {.inline.} =
+  peekMatchStrImpl(reader, str)
+
+proc peekMatch*(reader: var JsonReader, str: static string): bool {.inline.} =
+  # maybe make a const array
+  peekMatchStrImpl(reader, str)
+
 proc nextMatch*(reader: var JsonReader, str: openArray[char]): bool {.inline.} =
+  result = peekMatch(reader, str)
+  if result:
+    for i in 0 ..< str.len:
+      reader.unsafeNext()
+
+proc nextMatch*[I](reader: var JsonReader, str: array[I, char]): bool {.inline.} =
+  result = peekMatch(reader, str)
+  if result:
+    for i in 0 ..< str.len:
+      reader.unsafeNext()
+
+proc nextMatch*(reader: var JsonReader, str: static string): bool {.inline.} =
   result = peekMatch(reader, str)
   if result:
     for i in 0 ..< str.len:

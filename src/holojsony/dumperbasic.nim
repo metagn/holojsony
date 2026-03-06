@@ -1,4 +1,5 @@
 import ./[common, dumperdef], hemodyne/syncartery, std/[json, typetraits, unicode]
+import std/math # for classify
 
 export JsonDumper, JsonDumperOptions, initJsonDumper, startDump
 
@@ -148,9 +149,29 @@ proc dump*(dumper: var JsonDumper, v: int|int8|int16|int32|int64) {.inline.} =
 
 proc dump*(dumper: var JsonDumper, v: SomeFloat) =
   #dumper.write $v # original jsony
-  # XXX nan inf strings
-  dumper.artery.buffer.addFloat(v)
-  dumper.consumeBuffer()
+  let cls = classify(v)
+  case cls
+  of fcNan:
+    if dumper.options.rawJsNanInf:
+      dumper.write "NaN"
+    else:
+      # copy nim json
+      dumper.write "\"nan\""
+  of fcInf:
+    if dumper.options.rawJsNanInf:
+      dumper.write "Infinity"
+    else:
+      # copy nim json
+      dumper.write "\"inf\""
+  of fcNegInf:
+    if dumper.options.rawJsNanInf:
+      dumper.write "-Infinity"
+    else:
+      # copy nim json
+      dumper.write "\"-inf\""
+  else:
+    dumper.artery.buffer.addFloat(v)
+    dumper.consumeBuffer()
 
 proc validRuneAt(s: string, i: int, rune: var Rune): int =
   # returns number of skipped bytes
@@ -326,7 +347,11 @@ proc dump*(dumper: var JsonDumper, v: tuple) =
   dumper.write ']'
 
 proc dump*(dumper: var JsonDumper, v: enum) {.inline.} =
-  dumper.dump($v)
+  case dumper.options.defaultEnumOutput
+  of EnumName:
+    dumper.dump($v)
+  of EnumOrd:
+    dumper.dump(ord(v))
 
 proc dump*[N, T](dumper: var JsonDumper, v: array[N, T]) =
   dumper.write '['

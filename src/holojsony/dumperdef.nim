@@ -1,12 +1,17 @@
 import hemodyne/syncartery
 
 type
+  EnumOutput = enum
+    EnumName, EnumOrd
   JsonDumperOptions* = object
     keepUtf8*: bool = true
       ## keeps valid utf 8 codepoints in strings as-is instead of encoding an escape sequence 
     useXEscape*: bool
       ## uses \x instead of \u for characters known to be small, not in json standard
-    # maybe pretty mode
+    rawJsNanInf*: bool
+      ## produces raw NaN/Infinity/-Infinity as in js and json5, as opposed to strings as in nim json
+    defaultEnumOutput*: EnumOutput
+    # XXX maybe pretty mode
   JsonDumper* = object
     options*: JsonDumperOptions
     artery*: Artery # for like buffering writing to a file
