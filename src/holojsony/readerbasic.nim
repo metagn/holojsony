@@ -535,12 +535,17 @@ macro genRenameCase(fields: static openArray[(string, FieldJsonOptions)], key: s
         branch.add newLit(name)
       #branch.add crudeReplaceIdent(body, "field", newDotExpr(copy v, ident fieldName))
       let fieldIdent = ident fieldName
-      branch.add quote do:
-        # XXX compiler thinks this is immutable:
-        #read(reader, `v`.`fieldIdent`)
-        var v2 = default(typeof(`v`.`fieldIdent`))
-        read(reader, v2)
-        `v`.`fieldIdent` = v2
+      when false:
+        branch.add newStmtList(
+          newCall(ident"read", ident"reader", newDotExpr(copy v, fieldIdent))
+        )
+      else:
+        branch.add quote do:
+          # XXX compiler thinks this is immutable:
+          #read(reader, `v`.`fieldIdent`)
+          var v2: typeof(`v`.`fieldIdent`)
+          read(reader, v2)
+          `v`.`fieldIdent` = v2
       result.add branch
   if result.len == 1:
     result = newTree(nnkDiscardStmt, newEmptyNode())
@@ -637,13 +642,20 @@ macro genDiscrimCase(fields: static openArray[(string, FieldJsonOptions)], key: 
         branch.add newLit(name)
       #branch.add crudeReplaceIdent(body, "field", newDotExpr(copy v, ident fieldName))
       let fieldIdent = ident fieldName
-      branch.add quote do:
-        # XXX compiler thinks this is immutable:
-        #read(reader, `v`.`fieldIdent`)
-        var v2 = default(typeof(`v`.`fieldIdent`))
-        read(reader, v2)
-        initObjVariant(`v`, v2)
-        break
+      when false:
+        branch.add newStmtList(
+          newCall(ident"read", ident"reader", newDotExpr(copy v, fieldIdent)),
+          newCall(ident"initObjVariant", copy v, newDotExpr(copy v, copy fieldIdent)),
+          newTree(nnkBreakStmt, newEmptyNode())
+        )
+      else:
+        branch.add quote do:
+          # XXX compiler thinks this is immutable:
+          #read(reader, `v`.`fieldIdent`)
+          var v2: typeof(`v`.`fieldIdent`)
+          read(reader, v2)
+          initObjVariant(`v`, v2)
+          break
       result.add branch
   if result.len == 1:
     result = newTree(nnkDiscardStmt, newEmptyNode())

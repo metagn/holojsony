@@ -73,6 +73,7 @@ proc newHook(foo: var Foo5) =
 block:
   var s = """{"id":"123", "visible": "yes"}"""
   var v = s.fromJson(Foo5)
+  echo v
   doAssert v.id == "123"
   doAssert v.visible == "yes"
 
