@@ -1,4 +1,4 @@
-import holojsony, holojsony/readerdef
+import holojsony
 
 doAssertRaises CatchableError:
   var

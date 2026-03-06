@@ -7,24 +7,18 @@ proc dump*[T](dumper: var JsonDumper, v: Option[T]) {.inline.} =
     dumper.dump(v.get())
 
 proc dump*[T](dumper: var JsonDumper, v: SomeSet[T]) =
-  dumper.write '['
-  var i = 0
-  for e in v:
-    if i != 0:
-      dumper.write ','
-    dumper.dump(e)
-    inc i
-  dumper.write ']'
+  var arr: ArrayDump
+  dumper.withArrayDump(arr):
+    for e in v:
+      dumper.withArrayItem(arr):
+        dumper.dump(e)
 
 proc dump*[T](dumper: var JsonDumper, v: set[T]) =
-  dumper.write '['
-  var i = 0
-  for e in v:
-    if i != 0:
-      dumper.write ','
-    dumper.dump(e)
-    inc i
-  dumper.write ']'
+  var arr: ArrayDump
+  dumper.withArrayDump(arr):
+    for e in v:
+      dumper.withArrayItem(arr):
+        dumper.dump(e)
 
 proc dump*[K: string | enum, V](dumper: var JsonDumper, tab: SomeTable[K, V]) =
   ## Dump an object.
@@ -33,14 +27,8 @@ proc dump*[K: string | enum, V](dumper: var JsonDumper, tab: SomeTable[K, V]) =
     if isNil(v):
       dumper.write "null"
       return
-  dumper.write '{'
-  var comma = false
-  for k, v in tab:
-    if comma:
-      dumper.write ','
-    else:
-      comma = true
-    dumper.dump $k
-    dumper.write ':'
-    dumper.dump v
-  dumper.write '}'
+  var obj: ObjectDump
+  dumper.withObjectDump(obj):
+    for k, v in tab:
+      dumper.withObjectField(obj, $k):
+        dumper.dump v

@@ -72,12 +72,14 @@ type Fraction = object
 
 proc dump(s: var JsonDumper, v: Fraction) =
   ## Output fraction type as a string "x/y".
-  s.write '"'
-  s.write $v.numerator
-  s.write '/'
-  s.write $v.denominator
-  s.write '"'
-  #s.dump $v.numerator & '/' & $v.denominator
+  if true:
+    s.write '"'
+    s.write $v.numerator
+    s.write '/'
+    s.write $v.denominator
+    s.write '"'
+  else:
+    s.dump $v.numerator & '/' & $v.denominator
 
 var f = Fraction(numerator: 10, denominator: 13)
 doAssert f.toJson() == "\"10/13\""

@@ -1,7 +1,6 @@
 import hemodyne/syncvein, ./common
 
 type
-  JsonParseError* = object of CatchableError
   JsonReaderOptions* = object
     doLineColumn*: bool = true
     handleUtf16*: bool = true
@@ -38,12 +37,12 @@ proc parseError*(reader: var JsonReader, msg: string) {.inline.} =
   ## Shortcut to raise an exception.
   raise newException(JsonParseError, "(" & $reader.line & ", " & $reader.column & ") " & msg)
 
-proc extendBufferOne*(reader: var JsonReader) {.inline.} =
-  let remove = reader.vein.extendBufferOne()
+proc loadBufferOne*(reader: var JsonReader) {.inline.} =
+  let remove = reader.vein.loadBufferOne()
   reader.bufferPos -= remove
 
-proc extendBufferBy*(reader: var JsonReader, n: int) {.inline.} =
-  let remove = reader.vein.extendBufferBy(n)
+proc loadBufferBy*(reader: var JsonReader, n: int) {.inline.} =
+  let remove = reader.vein.loadBufferBy(n)
   reader.bufferPos -= remove
 
 proc peek*(reader: var JsonReader, c: var char): bool {.inline.} =
@@ -52,7 +51,7 @@ proc peek*(reader: var JsonReader, c: var char): bool {.inline.} =
     c = reader.vein.buffer[nextPos]
     result = true
   else:
-    reader.extendBufferOne()
+    reader.loadBufferOne()
     if nextPos < reader.vein.buffer.len:
       c = reader.vein.buffer[nextPos]
       result = true
@@ -68,7 +67,7 @@ proc peek*(reader: var JsonReader, c: var char, offset: int): bool {.inline.} =
     c = reader.vein.buffer[nextPos]
     result = true
   else:
-    reader.extendBufferBy(1 + offset)
+    reader.loadBufferBy(1 + offset)
     if nextPos < reader.vein.buffer.len:
       c = reader.vein.buffer[nextPos]
       result = true
@@ -82,7 +81,7 @@ proc peek*(reader: var JsonReader, cs: var openArray[char]): bool {.inline.} =
   result = false
   let n = cs.len
   if reader.bufferPos + n >= reader.vein.buffer.len:
-    reader.extendBufferBy(n)
+    reader.loadBufferBy(n)
   if reader.bufferPos + n < reader.vein.buffer.len:
     result = true
     for i in 0 ..< n:
@@ -159,7 +158,7 @@ proc nextMatch*(reader: var JsonReader, c: char): bool {.inline.} =
 
 proc peekMatch*(reader: var JsonReader, c: char, offset: int): bool {.inline.} =
   if reader.bufferPos + 1 + offset >= reader.vein.buffer.len:
-    reader.extendBufferBy(1 + offset)
+    reader.loadBufferBy(1 + offset)
   if reader.bufferPos + 1 + offset < reader.vein.buffer.len:
     if c != reader.vein.buffer[reader.bufferPos + 1 + offset]:
       return false
@@ -188,7 +187,7 @@ proc nextMatch*(reader: var JsonReader, cs: set[char]): bool {.inline.} =
 
 proc peekMatch*(reader: var JsonReader, cs: set[char], offset: int, c: var char): bool {.inline.} =
   if reader.bufferPos + 1 + offset >= reader.vein.buffer.len:
-    reader.extendBufferBy(1 + offset)
+    reader.loadBufferBy(1 + offset)
   if reader.bufferPos + 1 + offset < reader.vein.buffer.len:
     let c2 = reader.vein.buffer[reader.bufferPos + 1 + offset]
     if c2 in cs:
@@ -202,9 +201,9 @@ proc peekMatch*(reader: var JsonReader, cs: set[char], offset: int): bool {.inli
   var dummy: char
   result = reader.peekMatch(cs, offset, dummy)
 
-proc peekMatch*(reader: var JsonReader, str: string): bool {.inline.} =
+proc peekMatch*(reader: var JsonReader, str: openArray[char]): bool {.inline.} =
   if reader.bufferPos + str.len >= reader.vein.buffer.len:
-    reader.extendBufferBy(str.len)
+    reader.loadBufferBy(str.len)
   if reader.bufferPos + str.len < reader.vein.buffer.len:
     for i in 0 ..< str.len:
       if str[i] != reader.vein.buffer[reader.bufferPos + 1 + i]:
@@ -213,7 +212,7 @@ proc peekMatch*(reader: var JsonReader, str: string): bool {.inline.} =
   else:
     result = false
 
-proc nextMatch*(reader: var JsonReader, str: string): bool {.inline.} =
+proc nextMatch*(reader: var JsonReader, str: openArray[char]): bool {.inline.} =
   result = peekMatch(reader, str)
   if result:
     for i in 0 ..< str.len:

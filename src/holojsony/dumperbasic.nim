@@ -24,13 +24,13 @@ proc startArrayDump*(dumper: var JsonDumper): ArrayDump {.inline.} =
 proc finishArrayDump*(dumper: var JsonDumper, arr: var ArrayDump) {.inline.} =
   dumper.write ']'
 
-proc startArrayField*(dumper: var JsonDumper, arr: var ArrayDump) {.inline.} =
+proc startArrayItem*(dumper: var JsonDumper, arr: var ArrayDump) {.inline.} =
   if arr.needsComma:
     dumper.write ','
   else:
     arr.needsComma = true
 
-proc finishArrayField*(dumper: var JsonDumper, arr: var ArrayDump) {.inline.} =
+proc finishArrayItem*(dumper: var JsonDumper, arr: var ArrayDump) {.inline.} =
   discard
 
 template withArrayDump*(dumper: var JsonDumper, arr: var ArrayDump, body: typed) =
@@ -38,10 +38,10 @@ template withArrayDump*(dumper: var JsonDumper, arr: var ArrayDump, body: typed)
   body
   finishArrayDump(dumper, arr)
 
-template withArrayField*(dumper: var JsonDumper, arr: var ArrayDump, body: typed) =
-  startArrayField(dumper, arr)
+template withArrayItem*(dumper: var JsonDumper, arr: var ArrayDump, body: typed) =
+  startArrayItem(dumper, arr)
   body
-  finishArrayField(dumper, arr)
+  finishArrayItem(dumper, arr)
 
 proc startObjectDump*(dumper: var JsonDumper): ObjectDump {.inline.} =
   result = ObjectDump(needsComma: false)
@@ -50,12 +50,15 @@ proc startObjectDump*(dumper: var JsonDumper): ObjectDump {.inline.} =
 proc finishObjectDump*(dumper: var JsonDumper, arr: var ObjectDump) {.inline.} =
   dumper.write '}'
 
-proc startObjectField*(dumper: var JsonDumper, arr: var ObjectDump, name: string) {.inline.} =
+proc startObjectField*(dumper: var JsonDumper, arr: var ObjectDump, name: string, raw = false) {.inline.} =
   if arr.needsComma:
     dumper.write ','
   else:
     arr.needsComma = true
-  dumper.dump name
+  if raw:
+    dumper.write name
+  else:
+    dumper.dump name
   dumper.write ':'
 
 proc finishObjectField*(dumper: var JsonDumper, arr: var ObjectDump) {.inline.} =
@@ -68,6 +71,11 @@ template withObjectDump*(dumper: var JsonDumper, arr: var ObjectDump, body: type
 
 template withObjectField*(dumper: var JsonDumper, arr: var ObjectDump, name: string, body: typed) =
   startObjectField(dumper, arr, name)
+  body
+  finishObjectField(dumper, arr)
+
+template withRawObjectField*(dumper: var JsonDumper, arr: var ObjectDump, name: string, body: typed) =
+  startObjectField(dumper, arr, name, raw = true)
   body
   finishObjectField(dumper, arr)
 
@@ -120,7 +128,7 @@ proc dumpNumberFast(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64) 
     dumper.artery.buffer[at] = digits[p]
     dec p
     inc at
-  dumper.flushBuffer()
+  dumper.consumeBuffer()
 
 proc dump*(dumper: var JsonDumper, v: uint|uint8|uint16|uint32|uint64) {.inline.} =
   when nimvm:
@@ -142,7 +150,7 @@ proc dump*(dumper: var JsonDumper, v: SomeFloat) =
   #dumper.write $v # original jsony
   # XXX nan inf strings
   dumper.artery.buffer.addFloat(v)
-  dumper.flushBuffer()
+  dumper.consumeBuffer()
 
 proc validRuneAt(s: string, i: int, rune: var Rune): int =
   # returns number of skipped bytes
@@ -220,7 +228,7 @@ proc dump*(dumper: var JsonDumper, v: string) =
             let sLen = dumper.artery.buffer.len
             dumper.artery.buffer.setLen(sLen + numBytes)
             copyMem(dumper.artery.buffer[sLen].addr, v[copyStart].unsafeAddr, numBytes)
-        dumper.flushBuffer()
+        dumper.consumeBuffer()
       inCopy = false
   try:
     while i < v.len:

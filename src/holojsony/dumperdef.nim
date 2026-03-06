@@ -36,7 +36,7 @@ proc startDump*(dumper: var JsonDumper) {.inline.} =
 proc finishDump*(dumper: var JsonDumper): string {.inline.} =
   ## returns leftover buffer
   doAssert dumper.flushLocks == 0, "unpaired flush lock"
-  dumper.flushPos += dumper.artery.flushBufferFull(dumper.flushPos)
+  dumper.flushPos += dumper.artery.consumeBufferFull(dumper.flushPos)
   if dumper.flushPos < dumper.artery.buffer.len:
     result = dumper.artery.buffer[dumper.flushPos ..< dumper.artery.buffer.len]
   else:
@@ -48,18 +48,17 @@ proc addToBuffer*(dumper: var JsonDumper, c: char) {.inline.} =
 proc addToBuffer*(dumper: var JsonDumper, s: sink string) {.inline.} =
   dumper.flushPos -= dumper.artery.addToBuffer(s)
 
-proc flushBuffer*(dumper: var JsonDumper) {.inline.} =
-  # XXX maybe pick a better word, maybe "flow" or just "send" to be boring
-  #dumper.artery.flushBufferOnce(bufferPos)
-  dumper.flushPos += dumper.artery.flushBuffer(dumper.flushPos)
-  if dumper.flushLocks == 0: dumper.artery.freeAfter = dumper.flushPos
+proc consumeBuffer*(dumper: var JsonDumper) {.inline.} =
+  #dumper.artery.consumeBufferOnce(bufferPos)
+  dumper.flushPos += dumper.artery.consumeBuffer(dumper.flushPos)
+  if dumper.flushLocks == 0: dumper.artery.freeBefore = dumper.flushPos
 
 proc write*(dumper: var JsonDumper, c: char) {.inline.} =
   dumper.addToBuffer(c)
-  dumper.flushBuffer()
+  dumper.consumeBuffer()
 
 proc write*(dumper: var JsonDumper, s: sink string) {.inline.} =
   dumper.addToBuffer(s)
-  dumper.flushBuffer()
+  dumper.consumeBuffer()
 
 {.pop.}
