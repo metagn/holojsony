@@ -23,6 +23,7 @@ task tests, "run tests for multiple backends and defines":
   when declared(runTests):
     runTests(
       backends = {c, js, nims},
+      recursiveDir = true
     )
   else:
     echo "tests task not implemented, need nimbleutils"
