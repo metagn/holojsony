@@ -5,10 +5,10 @@ const jsonyHookCompatibility* {.booldefine.} = true
   ## these may become compile time hooks instead. since all other hooks are simply renamed or
   ## had their signature changed, this flag does not affect other hooks
 
-const jsonyFieldCompatibility* {.booldefine.} = true
+const jsonyFieldCompatibility* {.booldefine.} = false
   ## uses the jsony field name patterns by default, which is: to read the original name and a snake case
   ## version of the name, and to output the original name of the field.
-  ## true by default, when disabled only the snake case version of the name is used for both reading and output.
+  ## false by default, when disabled only the snake case version of the name is used for both reading and output.
 
 type
   RawJson* = distinct string

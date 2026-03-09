@@ -21,8 +21,8 @@ block:
     for i in 0 ..< 1000:
       keep holo_json.fromJson(jsonStr, string)
 
-  timeIt "holo_json line column", 100:
-    var reader = initJsonReader(JsonReaderOptions(doLineColumn: true))
+  timeIt "holo_json no line column", 100:
+    var reader = initJsonReader(JsonReaderOptions(doLineColumn: false))
     for i in 0 ..< 1000:
       reader.startRead(jsonStr)
       var s: string
@@ -51,8 +51,8 @@ block:
     for i in 0 ..< 1000:
       keep holo_json.fromJson(jsonStr, Node)
 
-  timeIt "holo_json line column", 100:
-    var reader = initJsonReader(JsonReaderOptions(doLineColumn: true))
+  timeIt "holo_json no line column", 100:
+    var reader = initJsonReader(JsonReaderOptions(doLineColumn: false))
     for i in 0 ..< 1000:
       reader.startRead(jsonStr)
       var s: Node
@@ -81,8 +81,8 @@ block:
   timeIt "holo_json", 100:
     keep holo_json.fromJson(jsonStr, seq[Node])
 
-  timeIt "holo_json line column", 100:
-    var reader = initJsonReader(JsonReaderOptions(doLineColumn: true))
+  timeIt "holo_json no line column", 100:
+    var reader = initJsonReader(JsonReaderOptions(doLineColumn: false))
     reader.startRead(jsonStr)
     var s: seq[Node]
     holo_json.read(reader, s)

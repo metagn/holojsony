@@ -26,9 +26,9 @@ type
 # Test renameHook and discriminator Field Name not being first/missing.
 block:
   let
-    a = """{"active":true,"type":"nkFloat","floatVal":3.14}""".fromJson(RefNode)
-    b = """{"floatVal":3.14,"active":true,"type":"nkFloat"}""".fromJson(RefNode)
-    c = """{"type":"nkFloat","floatVal":3.14,"active":true}""".fromJson(RefNode)
+    a = """{"active":true,"type":"nkFloat","float_val":3.14}""".fromJson(RefNode)
+    b = """{"float_val":3.14,"active":true,"type":"nkFloat"}""".fromJson(RefNode)
+    c = """{"type":"nkFloat","float_val":3.14,"active":true}""".fromJson(RefNode)
     d = """{"active":true,"intVal":42}""".fromJson(RefNode)
   doAssert a.kind == nkFloat
   doAssert b.kind == nkFloat
@@ -41,9 +41,9 @@ block:
 
 block:
   let
-    a = """{"active":true,"type":"nkFloat","floatVal":3.14}""".fromJson(ValueNode)
-    b = """{"floatVal":3.14,"active":true,"type":"nkFloat"}""".fromJson(ValueNode)
-    c = """{"type":"nkFloat","floatVal":3.14,"active":true}""".fromJson(ValueNode)
+    a = """{"active":true,"type":"nkFloat","float_val":3.14}""".fromJson(ValueNode)
+    b = """{"float_al":3.14,"active":true,"type":"nkFloat"}""".fromJson(ValueNode)
+    c = """{"type":"nkFloat","float_val":3.14,"active":true}""".fromJson(ValueNode)
     d = """{"active":true,"intVal":42}""".fromJson(ValueNode)
   doAssert a.kind == nkFloat
   doAssert b.kind == nkFloat

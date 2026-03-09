@@ -2,9 +2,12 @@
 
 import hemodyne/syncvein, ./common, std/streams
 
+const holojsonLineColumn* {.booldefine.} = true
+  ## enables/disables line column tracking by default, has very little impact on performance
+
 type
   JsonReaderOptions* = object
-    doLineColumn*: bool = false
+    doLineColumn*: bool = holojsonLineColumn
     handleUtf16*: bool = true
       ## jsony converts utf 16 characters in strings by default apparently so does stdlib json
     forceUtf8Strings*: bool
