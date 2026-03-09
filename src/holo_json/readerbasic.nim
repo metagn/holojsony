@@ -112,9 +112,9 @@ proc peekKind*(reader: var JsonReader): JsonNodeKind =
       msg.addQuoted(start)
       reader.parseError(msg)
 
-proc readKind*(reader: var JsonReader): JsonNodeKind {.inline.} =
+proc peekKindSkipSpace*(reader: var JsonReader): JsonNodeKind {.inline.} =
   ## guesses which kind the next object is, skips spaces
-  ## not guaranteed to be accurate,all numbers are assumed float
+  ## not guaranteed to be accurate, all numbers are assumed float
   eatSpace(reader)
   result = peekKind(reader)
 

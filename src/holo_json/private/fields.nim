@@ -51,7 +51,7 @@ proc matchCustomPragma(sym: NimNode): bool =
     let impl = getImpl(sym)
     result = impl != nil and impl.kind == nnkTemplateDef
 
-macro fieldOptionPairs*[T: object | ref object | tuple](obj: T): untyped =
+proc buildFieldOptionPairs*(obj: NimNode): NimNode =
   var names: seq[(string, NimNode)] = @[]
   var t = obj
   var isTuple = false
@@ -120,9 +120,19 @@ macro fieldOptionPairs*[T: object | ref object | tuple](obj: T): untyped =
           else:
             FieldJsonOptions()
 
+macro fieldOptionPairs*[T: object | ref object | tuple](obj: T): untyped =
+  result = buildFieldOptionPairs(obj)
+
+macro fieldOptionPairs*[T: object | ref object | tuple](obj: typedesc[T]): untyped =
+  result = buildFieldOptionPairs(obj)
+
 macro fieldOptionTable*[T: object | ref object | tuple](obj: T): Table[string, FieldJsonOptions] =
-  result = newCall(bindSym"toTable", getAst(fieldOptionPairs(obj)))
+  result = newCall(bindSym"toTable", buildFieldOptionPairs(obj))
+
+macro fieldOptionTable*[T: object | ref object | tuple](obj: typedesc[T]): Table[string, FieldJsonOptions] =
+  result = newCall(bindSym"toTable", buildFieldOptionPairs(obj))
 
 # XXX types could also define hooks for these too
+# where to put the hook definition though, this module imports common
 
 # XXX consider adapting enum fields
