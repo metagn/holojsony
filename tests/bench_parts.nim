@@ -21,6 +21,14 @@ block:
     for i in 0 ..< 1000:
       keep holo_json.fromJson(jsonStr, string)
 
+  timeIt "holo_json line column", 100:
+    var reader = initJsonReader(JsonReaderOptions(doLineColumn: true))
+    for i in 0 ..< 1000:
+      reader.startRead(jsonStr)
+      var s: string
+      holo_json.read(reader, s)
+      keep s
+
   when status:
     timeIt "status-im/nim-json-serialization", 100:
       for i in 0 ..< 1000:
@@ -43,6 +51,14 @@ block:
     for i in 0 ..< 1000:
       keep holo_json.fromJson(jsonStr, Node)
 
+  timeIt "holo_json line column", 100:
+    var reader = initJsonReader(JsonReaderOptions(doLineColumn: true))
+    for i in 0 ..< 1000:
+      reader.startRead(jsonStr)
+      var s: Node
+      holo_json.read(reader, s)
+      keep s
+
   when status:
     timeIt "status-im/nim-json-serialization", 100:
       for i in 0 ..< 1000:
@@ -64,6 +80,13 @@ block:
     keep jsony.fromJson(jsonStr, seq[Node])
   timeIt "holo_json", 100:
     keep holo_json.fromJson(jsonStr, seq[Node])
+
+  timeIt "holo_json line column", 100:
+    var reader = initJsonReader(JsonReaderOptions(doLineColumn: true))
+    reader.startRead(jsonStr)
+    var s: seq[Node]
+    holo_json.read(reader, s)
+    keep s
 
   when status:
     timeIt "status-im/nim-json-serialization", 100:

@@ -5,6 +5,11 @@ const jsonyHookCompatibility* {.booldefine.} = true
   ## these may become compile time hooks instead. since all other hooks are simply renamed or
   ## had their signature changed, this flag does not affect other hooks
 
+const jsonyFieldCompatibility* {.booldefine.} = true
+  ## uses the jsony field name patterns by default, which is: to read the original name and a snake case
+  ## version of the name, and to output the original name of the field.
+  ## true by default, when disabled only the snake case version of the name is used for both reading and output.
+
 type
   RawJson* = distinct string
   JsonValueError* = object of ValueError
@@ -15,16 +20,19 @@ type
 type
   NamePatternKind* = enum
     NoName,
+    NameOriginal, ## uses the field name
     NameString, ## uses custom string and ignores field name
     NameSnakeCase ## converts field name to snake case
     # maybe raw json unquoted name
-    # concat
+    NameConcat
   NamePattern* = object
     ## string pattern to apply to a given field name to use in json
     case kind*: NamePatternKind
     of NoName: discard
+    of NameOriginal: discard
     of NameString: str*: string
     of NameSnakeCase: discard
+    of NameConcat: concat*: seq[NamePattern]
   FieldJsonOptions* = object
     ## json serialization/deserialization options for an object field
     readNames*: seq[NamePattern]
@@ -80,9 +88,18 @@ proc ignore*(): FieldJsonOptions =
 proc apply*(pattern: NamePattern, name: string): string =
   ## applies a name pattern to a given name
   case pattern.kind
-  of NoName: ""
-  of NameString: pattern.str
-  of NameSnakeCase: snakeCaseDynamic(name)
+  of NoName:
+    result = ""
+  of NameOriginal:
+    result = name
+  of NameString:
+    result = pattern.str
+  of NameSnakeCase:
+    result = snakeCaseDynamic(name)
+  of NameConcat:
+    if pattern.concat.len == 0: return ""
+    result = apply(pattern.concat[0], name)
+    for i in 1 ..< pattern.concat.len: result.add apply(pattern.concat[i], name)
 
 proc getReadNames*(fieldName: string, options: FieldJsonOptions): seq[string] =
   ## gives the names accepted for this field when encountered in json
@@ -93,9 +110,12 @@ proc getReadNames*(fieldName: string, options: FieldJsonOptions): seq[string] =
       let name = apply(pat, fieldName)
       if name notin result: result.add name
   else:
-    result = @[fieldName]
-    let snakeCase = snakeCaseDynamic(fieldName)
-    if snakeCase != fieldName: result.add snakeCase
+    if jsonyFieldCompatibility:
+      result = @[fieldName]
+      let snakeCase = snakeCaseDynamic(fieldName)
+      if snakeCase != fieldName: result.add snakeCase
+    else:
+      result = @[snakeCaseDynamic(fieldName)]
 
 proc getDumpName*(fieldName: string, options: FieldJsonOptions): string =
   ## gives the name to dump this field in json by
@@ -103,4 +123,7 @@ proc getDumpName*(fieldName: string, options: FieldJsonOptions): string =
   if options.dumpName.kind != NoName:
     result = apply(options.dumpName, fieldName)
   else:
-    result = fieldName
+    if jsonyFieldCompatibility:
+      result = fieldName
+    else:
+      result = snakeCaseDynamic(fieldName)

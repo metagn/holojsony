@@ -4,7 +4,7 @@ import hemodyne/syncvein, ./common, std/streams
 
 type
   JsonReaderOptions* = object
-    doLineColumn*: bool = true
+    doLineColumn*: bool = false
     handleUtf16*: bool = true
       ## jsony converts utf 16 characters in strings by default apparently so does stdlib json
     forceUtf8Strings*: bool
@@ -124,14 +124,34 @@ proc unsafeNext*(reader: var JsonReader) {.inline.} =
   # keep separate from next for now
   let prevPos = reader.bufferPos
   inc reader.bufferPos
-  let c = reader.vein.buffer[reader.bufferPos]
   if reader.options.doLineColumn:
+    let c = reader.vein.buffer[reader.bufferPos]
     if c == '\n' or (c == '\r' and reader.peekOrZero() != '\n'):
       inc reader.line
       reader.column = 1
     else:
       inc reader.column
   if reader.bufferLocks == 0: reader.vein.setFreeBefore(prevPos)
+
+proc unsafeNextBy*(reader: var JsonReader, n: int) {.inline.} =
+  # keep separate from next for now
+  let prevPos = reader.bufferPos
+  inc reader.bufferPos, n
+  if reader.options.doLineColumn:
+    for i in prevPos ..< reader.bufferPos:
+      let c = reader.vein.buffer[i]
+      if c == '\n' or (c == '\r' and reader.vein.buffer[i + 1] != '\n'):
+        inc reader.line
+        reader.column = 1
+      else:
+        inc reader.column
+    let cf = reader.vein.buffer[reader.bufferPos]
+    if cf == '\n' or (cf == '\r' and reader.peekOrZero() != '\n'):
+      inc reader.line
+      reader.column = 1
+    else:
+      inc reader.column
+  if reader.bufferLocks == 0: reader.vein.setFreeBefore(reader.bufferPos - 1)
 
 proc next*(reader: var JsonReader, c: var char): bool {.inline.} =
   # keep separate from unsafeNext for now
@@ -239,19 +259,16 @@ proc peekMatch*(reader: var JsonReader, str: static string): bool {.inline.} =
 proc nextMatch*(reader: var JsonReader, str: openArray[char]): bool {.inline.} =
   result = peekMatch(reader, str)
   if result:
-    for i in 0 ..< str.len:
-      reader.unsafeNext()
+    reader.unsafeNextBy(str.len)
 
 proc nextMatch*[I](reader: var JsonReader, str: array[I, char]): bool {.inline.} =
   result = peekMatch(reader, str)
   if result:
-    for i in 0 ..< str.len:
-      reader.unsafeNext()
+    reader.unsafeNextBy(str.len)
 
 proc nextMatch*(reader: var JsonReader, str: static string): bool {.inline.} =
   result = peekMatch(reader, str)
   if result:
-    for i in 0 ..< str.len:
-      reader.unsafeNext()
+    reader.unsafeNextBy(str.len)
 
 {.pop.}

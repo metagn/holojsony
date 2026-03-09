@@ -46,6 +46,13 @@ timeIt "treeform/jsony", 100:
 timeIt "holo_json", 100:
   keep holo_json.fromJson(treeStr, Node)
 
+timeIt "holo_json line column", 100:
+  var reader = initJsonReader(JsonReaderOptions(doLineColumn: true))
+  reader.startRead(treeStr)
+  var s: Node
+  holo_json.read(reader, s)
+  keep s
+
 when status:
   timeIt "status-im/nim-json-serialization", 100:
     keep json_serialization.Json.decode(treeStr, Node)

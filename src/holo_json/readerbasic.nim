@@ -88,7 +88,7 @@ iterator readArray*(reader: var JsonReader): int =
     yield i
   eatChar(reader, ']')
 
-proc peekKind*(reader: var JsonReader): JsonNodeKind =
+proc peekRawKind*(reader: var JsonReader): JsonNodeKind =
   ## guesses which kind the next object is, assumes spaces are skipped
   ## not guaranteed to be accurate, all numbers are assumed float
   let start = reader.peekOrZero()
@@ -112,11 +112,11 @@ proc peekKind*(reader: var JsonReader): JsonNodeKind =
       msg.addQuoted(start)
       reader.parseError(msg)
 
-proc peekKindSkipSpace*(reader: var JsonReader): JsonNodeKind {.inline.} =
+proc peekRawKindSkipSpace*(reader: var JsonReader): JsonNodeKind {.inline.} =
   ## guesses which kind the next object is, skips spaces
   ## not guaranteed to be accurate, all numbers are assumed float
   eatSpace(reader)
-  result = peekKind(reader)
+  result = peekRawKind(reader)
 
 proc read*(reader: var JsonReader, v: var bool) =
   ## Will parse boolean true or false.
@@ -393,7 +393,7 @@ proc parseByte(reader: var JsonReader): byte =
   var hexStr: array[2, char]
   if not reader.peek(hexStr):
     reader.parseError("Expected byte escape hex but end reached.")
-  for i in 1..hexStr.len: reader.unsafeNext()
+  reader.unsafeNextBy(hexStr.len)
   result = parseHexInt(reader, hexStr).byte
 
 proc read*(reader: var JsonReader, v: var string) =
@@ -438,7 +438,7 @@ proc read*(reader: var JsonReader, v: var string) =
         var r: Rune
         let byteCount = reader.validRune(r, c)
         if byteCount != 0:
-          for _ in 1..byteCount: reader.unsafeNext()
+          reader.unsafeNextBy(byteCount)
         else: # Not a valid rune
           reader.error("Found invalid UTF-8 character.")
       else:
